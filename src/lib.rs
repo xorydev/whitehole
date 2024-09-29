@@ -14,6 +14,11 @@ pub fn handle_client(mut connection: TcpStream, target_dir: &String) -> std::io:
         return Ok(())
     }
     let client_desired_file_path = format!("{}/{}", target_dir, &header.split(" ").collect::<Vec<&str>>()[1][1..]); // Your code is not optimised if it doesn't make an inexperienced rustdev have a heart attack.
+    if client_desired_file_path.contains("..") {
+        connection.shutdown(Shutdown::Both)?;
+        println!("You should kill yourself... NOW!");
+        return Ok(())
+    }
     dbg!(&client_desired_file_path);
     // let file_size: usize = fs::metadata(client_desired_file_path)?.len().try_into().unwrap();
     // let mut buffer = vec![0 as u8; file_size]; // Nuke the buffer.
