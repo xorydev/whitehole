@@ -1,30 +1,53 @@
-use std::path::Path;
-use std::net::{TcpStream, Shutdown};
-use std::io::{Read, Write};
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{Shutdown, TcpStream};
 
 pub fn handle_client(mut connection: TcpStream, target_dir: &String) -> std::io::Result<()> {
-    let mut buffer = vec![0 as u8; 1024]; // Little bit of wiggle room.
-    connection.read(&mut buffer)?;
-    let header = String::from_utf8_lossy(&buffer).to_string();
-    println!("{header}");
-    if !header.starts_with("GET") {
-        connection.shutdown(Shutdown::Both)?;
-        println!("ion wanna hear it");
-        return Ok(())
+  let mut buffer: Vec<u8> = vec![];
+  match connection.read(&mut buffer) {
+    Ok(0) => {
+      println!("nvm");
+      return Ok(());
     }
-    let client_desired_file_path = format!("{}/{}", target_dir, &header.split(" ").collect::<Vec<&str>>()[1][1..]); // Your code is not optimised if it doesn't make an inexperienced rustdev have a heart attack.
-    if client_desired_file_path.contains("..") {
-        connection.shutdown(Shutdown::Both)?;
-        println!("You should kill yourself... NOW!");
-        return Ok(())
+    Err(e) => {
+      return Err(e);
     }
-    dbg!(&client_desired_file_path);
-    // let file_size: usize = fs::metadata(client_desired_file_path)?.len().try_into().unwrap();
-    // let mut buffer = vec![0 as u8; file_size]; // Nuke the buffer.
-    let mut response: Vec<u8> = String::from("HTTP/1.1 200 OK").into_bytes();
-    let mut file_contents = fs::read(&client_desired_file_path)?;
-    response.append(&mut file_contents);
-    connection.write(&response)?;
-    Ok(())
+    Ok(_) => {}
+  }
+
+  let req = String::from_utf8_lossy(&buffer).to_string();
+  println!("{req}");
+
+  if !req.starts_with("GET") {
+    connection.shutdown(Shutdown::Both)?;
+    println!("ion wanna hear it");
+    return Ok(());
+  }
+
+  let client_desired_file_path = format!(
+    "{}/{}",
+    target_dir,
+    &req.split(" ").collect::<Vec<&str>>()[1][1..]
+  ); // Your code is not optimised if it doesn't make an inexperienced rustdev have a heart attack.
+
+  if client_desired_file_path.contains("..") {
+    connection.shutdown(Shutdown::Both)?;
+    println!("You should kill yourself... NOW!");
+    return Ok(());
+  }
+
+  dbg!(&client_desired_file_path);
+  let mut file_contents = fs::read(&client_desired_file_path)?;
+  let content_length = file_contents.len();
+  let mut response: Vec<u8> =
+    format!("HTTP/1.1 200 OK\r\nContent-Length: {content_length}\r\n\r\n").into_bytes();
+  response.append(&mut file_contents);
+
+  let written = connection.write(&response)?;
+  let response_len = response.len();
+  if written != response.len() {
+    eprintln!("written: {written}, actual response length: {response_len}");
+  }
+
+  Ok(())
 }
